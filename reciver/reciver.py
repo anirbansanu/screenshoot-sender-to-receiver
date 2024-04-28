@@ -9,9 +9,9 @@ def receive_screenshot(host='127.0.0.1', port=12345):
             
             while True:
                 # Prompt user for input
-                user_input = input("Enter 's' to request a screenshot, or 'exit' to quit: ")
+                user_input = input("Enter 's' to request a screenshot, or 'exit' or 'q' to quit: ")
 
-                if user_input.lower() == 'exit':
+                if user_input.lower() == 'exit' or user_input.lower() == 'q':
                     receiver_socket.sendall(b'exit')
                     break
                 
@@ -30,7 +30,7 @@ def receive_screenshot(host='127.0.0.1', port=12345):
                         data = receiver_socket.recv(min(chunk_size, remaining_size))
                         screenshot_bytes += data
                         remaining_size -= len(data)
-                    timestamp = datetime.datetime.now().strftime("%H:%M:%S-%d-%m-%Y")
+                    timestamp = datetime.datetime.now().strftime("%Y-%m-%d-%H:%M:%S")
                     filename = f"{timestamp}_screenshot.png"
                     # Save the received screenshot data as a PNG file
                     with open(filename, 'wb') as f:
