@@ -1,50 +1,45 @@
 import socket
 import datetime
 
-def receive_data(conn, buffer_size):
-    received_data = b""
+def receive_screenshot(host='127.0.0.1', port=12345):
     try:
-        while True:
-            data_chunk = conn.recv(buffer_size)
-            if not data_chunk:
-                break
-            received_data += data_chunk
-    except socket.timeout:
-        print("Socket timeout. Data reception stopped.")
-    except ConnectionResetError:
-        print("Connection reset by peer.")
-    return received_data
+        # Establish a connection to the sender
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as receiver_socket:
+            receiver_socket.connect((host, port))
+            
+            while True:
+                # Prompt user for input
+                user_input = input("Enter 's' to request a screenshot, or 'exit' to quit: ")
 
-def request_screenshot(host, port):
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.settimeout(10)  # Set a timeout of 10 seconds
-        try:
-            s.connect((host, port))
-            s.sendall(b"send_screenshot")
-            received_data = receive_data(s, 4096)  # Adjust buffer size as needed
-            timestamp = datetime.datetime.now().strftime("%d-%m-%Y-%H:%M:%S")
-            filename = f"{timestamp}_screenshot.png"
-            with open(filename, "wb") as f:
-                f.write(received_data)
-            print("Screenshot received")
-            s.sendall(b"Screenshot received")  # Send acknowledgment to sender
-        except socket.timeout:
-            print("Connection timed out. Unable to connect to the sender.")
-        except ConnectionRefusedError:
-            print("Connection refused. Make sure the sender is running.")
-        except Exception as e:
-            print(f"Error: {e}")
+                if user_input.lower() == 'exit':
+                    receiver_socket.sendall(b'exit')
+                    break
+                
+                elif user_input.lower() == 's':
+                    # Send request to sender for screenshot
+                    receiver_socket.sendall(b'take_screenshot')
+
+                    # Receive the size of the screenshot data
+                    data_size = int.from_bytes(receiver_socket.recv(4), byteorder='big')
+
+                    # Receive the screenshot data in chunks
+                    screenshot_bytes = b""
+                    chunk_size = 1024
+                    remaining_size = data_size
+                    while remaining_size > 0:
+                        data = receiver_socket.recv(min(chunk_size, remaining_size))
+                        screenshot_bytes += data
+                        remaining_size -= len(data)
+                    timestamp = datetime.datetime.now().strftime("%H:%M:%S-%d-%m-%Y")
+                    filename = f"{timestamp}_screenshot.png"
+                    # Save the received screenshot data as a PNG file
+                    with open(filename, 'wb') as f:
+                        f.write(screenshot_bytes)
+
+                    print(f"Screenshot received and saved as '{filename}'")
+
+    except Exception as e:
+        print(f"Error: {e}")
 
 if __name__ == "__main__":
-    host = "127.0.0.1"  # Replace with sender's public IP or hostname
-    port = 3005  # Use the same port as in the sender script
-
-    while True:
-        user_input = input("Enter 'send' to request a screenshot or 'exit' to quit: ")
-        if user_input.lower() == "send":
-            request_screenshot(host, port)
-        elif user_input.lower() == "exit":
-            print("Exiting...")
-            break
-        else:
-            print("Invalid input. Please enter 'send' or 'exit'.")
+    receive_screenshot()

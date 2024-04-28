@@ -1,52 +1,47 @@
 import socket
-import pyautogui
-import os
-import datetime
+from PIL import ImageGrab
+import io
 
-def take_screenshot():
-    screenshot = pyautogui.screenshot()
-    timestamp = datetime.datetime.now().strftime("%d-%m-%Y-%H:%M:%S")
-    filename = f"screenshot_{timestamp}.png"
-    screenshot.save(filename)
-    print("Screenshot taken")
-    return filename
-
-def send_screenshot(conn, filename, buffer_size):
+def send_screenshot(host='127.0.0.1', port=12345):
     try:
-        with open(filename, "rb") as f:
+        # Establish a connection to the receiver
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sender_socket:
+            sender_socket.bind((host, port))
+            sender_socket.listen(1)
+            print("Sender waiting for connection...")
+
+            conn, addr = sender_socket.accept()
+            print(f"Connected to {addr}")
+
             while True:
-                data = f.read(buffer_size)
-                if not data:
+                # Wait for command from receiver
+                command = conn.recv(1024).decode()
+
+                if command.lower() == 'take_screenshot':
+                    # Capture the screenshot using Pillow (PIL)
+                    screenshot = ImageGrab.grab()
+
+                    # Convert the screenshot to PNG format
+                    with io.BytesIO() as buffer:
+                        screenshot.save(buffer, format="PNG")
+                        screenshot_bytes = buffer.getvalue()
+
+                    # Send the size of the screenshot data
+                    conn.sendall(len(screenshot_bytes).to_bytes(4, byteorder='big'))
+
+                    # Send the screenshot data in chunks
+                    chunk_size = 1024
+                    for i in range(0, len(screenshot_bytes), chunk_size):
+                        conn.sendall(screenshot_bytes[i:i + chunk_size])
+
+                    print("Screenshot sent successfully")
+
+                elif command.lower() == 'exit':
+                    print("Exiting...")
                     break
-                conn.sendall(data)
-        print("Screenshot sent")
-        ack = conn.recv(1024)  # Wait for receiver's acknowledgment
-        if ack == b"Screenshot received":
-            print("Receiver acknowledged receipt of the screenshot.")
-        else:
-            print("Receiver did not acknowledge receipt of the screenshot.")
-    except ConnectionResetError:
-        print("Connection reset by peer. Retrying...")
+
+    except Exception as e:
+        print(f"Error: {e}")
 
 if __name__ == "__main__":
-    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    s.bind(("127.0.0.1", 3005))  # Bind to all interfaces
-    s.listen()
-
-    print("Waiting for connection...")
-    conn, addr = s.accept()
-    print(f"Connected to {addr}")
-
-    while True:
-        request = conn.recv(1024).decode()
-        if request == "send_screenshot":
-            filename = take_screenshot()
-            buffer_size = 4096  # Specify the buffer size in bytes
-            send_screenshot(conn, filename, buffer_size)
-            os.remove(filename)  # Remove the screenshot file after sending
-        elif request == "exit":
-            print("Exiting...")
-            break
-
-    conn.close()
-    s.close()
+    send_screenshot()
