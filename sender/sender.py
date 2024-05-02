@@ -2,36 +2,33 @@ import socket
 from PIL import ImageGrab
 import io
 
-def send_screenshot(host='127.0.0.1', port=12345):
-    sender_socket = None  # Initialize sender_socket variable
+class ScreenshotSender:
+    def __init__(self, host='127.0.0.1', port=12345):
+        self.host = host
+        self.port = port
+        self.sender_socket = None
 
-    try:
-        # Establish a connection to the receiver
-        sender_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sender_socket.bind((host, port))
-        sender_socket.listen(1)
+    def establish_connection(self):
+        self.sender_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.sender_socket.bind((self.host, self.port))
+        self.sender_socket.listen(1)
         print("Sender waiting for connection...")
 
-        conn, addr = sender_socket.accept()
+    def send_screenshot(self):
+        conn, addr = self.sender_socket.accept()
         print(f"Connected to {addr}")
 
         while True:
-            # Wait for command from receiver
             command = conn.recv(1024).decode()
 
             if command.lower() == 'take_screenshot':
-                # Capture the screenshot using Pillow (PIL)
                 screenshot = ImageGrab.grab()
-
-                # Convert the screenshot to PNG format
                 with io.BytesIO() as buffer:
                     screenshot.save(buffer, format="PNG")
                     screenshot_bytes = buffer.getvalue()
 
-                # Send the size of the screenshot data
                 conn.sendall(len(screenshot_bytes).to_bytes(4, byteorder='big'))
 
-                # Send the screenshot data in chunks
                 chunk_size = 1024
                 for i in range(0, len(screenshot_bytes), chunk_size):
                     conn.sendall(screenshot_bytes[i:i + chunk_size])
@@ -39,16 +36,22 @@ def send_screenshot(host='127.0.0.1', port=12345):
                 print("Screenshot sent successfully")
 
             elif command.lower() == 'exit':
-                sender_socket.close()
+                self.sender_socket.close()
                 print("Connection Closed, Exiting...")
                 break
 
-    except Exception as e:
-        print(f"Error: {e}")
+    def run(self):
+        try:
+            self.establish_connection()
+            self.send_screenshot()
 
-    finally:
-        if sender_socket:
-            sender_socket.close()  # Close the socket in the finally block
+        except Exception as e:
+            print(f"Error: {e}")
+
+        finally:
+            if self.sender_socket:
+                self.sender_socket.close()
 
 if __name__ == "__main__":
-    send_screenshot()
+    sender = ScreenshotSender()
+    sender.run()
